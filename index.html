@@ -281,14 +281,102 @@
       }
     }
 
+    const Statistics = {
+      template: `
+        <div>
+          <div class="card">
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+              <button @click="viewType='expense'" :class="['btn', { 'btn-active': viewType === 'expense' }]" style="flex:1">支出</button>
+              <button @click="viewType='income'" :class="['btn', { 'btn-active': viewType === 'income' }]" style="flex:1">收入</button>
+            </div>
+            <div style="text-align:center;font-size:13px;color:#999;margin-bottom:8px">{{ selectedMonth }}</div>
+            <div style="text-align:center;font-size:28px;font-weight:600;margin-bottom:8px" :style="{ color: viewType === 'expense' ? '#FF6B6B' : '#4CAF50' }">¥{{ total }}</div>
+            <div style="text-align:center;font-size:13px;color:#999">{{ dayCount }} 笔记录 / 日均 ¥{{ dailyAvg }}</div>
+          </div>
+          <div class="card">
+            <div style="font-size:15px;font-weight:600;margin-bottom:16px">分类占比</div>
+            <div v-if="catRank.length === 0" style="text-align:center;padding:24px;color:#999;font-size:14px">本月暂无{{ viewType === 'expense' ? '支出' : '收入' }}记录</div>
+            <div v-for="(cat, idx) in catRank.slice(0, 8)" :key="cat.id" style="margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <span style="font-size:14px">{{ cat.icon }} {{ cat.name }}</span>
+                <span style="font-size:14px;font-weight:500">¥{{ cat.amount.toFixed(2) }} <span style="color:#999;font-size:12px">{{ cat.percent }}%</span></span>
+              </div>
+              <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden">
+                <div :style="{ height: '100%', width: cat.percent + '%', background: colors[idx % colors.length], borderRadius: '4px', transition: 'width 0.3s' }"></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="font-size:15px;font-weight:600;margin-bottom:16px">每日趋势</div>
+            <div style="display:flex;align-items:flex-end;gap:4px;height:120px;padding-bottom:20px;position:relative">
+              <div v-for="(day, idx) in dailyData" :key="day.date" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
+                <div v-if="day.amount > 0" :style="{ width: '100%', height: (day.amount / maxDaily * 100) + '%', background: idx === dailyData.length - 1 ? '#4A90D9' : '#B0D4F1', borderRadius: '4px 4px 0 0', minHeight: day.amount > 0 ? '4px' : '0' }"></div>
+                <span style="font-size:9px;color:#999;margin-top:4px;white-space:nowrap">{{ day.label }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const records = ref([])
+        const viewType = ref('expense')
+        const now = new Date()
+        const selectedMonth = ref(`${now.getFullYear()}年${now.getMonth() + 1}月`)
+
+        onMounted(() => { records.value = getRecords() })
+
+        const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        const monthRecords = computed(() => records.value.filter(r => r.date && r.date.startsWith(monthStr) && r.type === viewType.value))
+        const total = computed(() => monthRecords.value.reduce((s, r) => s + r.amount, 0).toFixed(2))
+        const dayCount = computed(() => monthRecords.value.length)
+        const dailyAvg = computed(() => dayCount.value > 0 ? (monthRecords.value.reduce((s, r) => s + r.amount, 0) / now.getDate()).toFixed(2) : '0.00')
+
+        const catRank = computed(() => {
+          const map = {}
+          monthRecords.value.forEach(r => {
+            if (!map[r.categoryId]) map[r.categoryId] = { id: r.categoryId, amount: 0 }
+            map[r.categoryId].amount += r.amount
+          })
+          const sum = monthRecords.value.reduce((s, r) => s + r.amount, 0)
+          return Object.values(map)
+            .map(c => ({ ...c, name: getCatName(c.id), icon: getCatIcon(c.id), percent: sum > 0 ? (c.amount / sum * 100).toFixed(1) : 0 }))
+            .sort((a, b) => b.amount - a.amount)
+        })
+
+        const dailyData = computed(() => {
+          const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+          const map = {}
+          monthRecords.value.forEach(r => {
+            const d = parseInt(r.date?.slice(8))
+            if (d) map[d] = (map[d] || 0) + r.amount
+          })
+          const result = []
+          for (let i = 1; i <= daysInMonth; i++) {
+            result.push({
+              date: `${monthStr}-${String(i).padStart(2, '0')}`,
+              amount: map[i] || 0,
+              label: i <= now.getDate() ? `${i}` : ''
+            })
+          }
+          return result.slice(0, now.getDate())
+        })
+
+        const maxDaily = computed(() => Math.max(1, ...dailyData.value.map(d => d.amount)))
+
+        const colors = ['#4A90D9', '#FF6B6B', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4', '#795548', '#607D8B']
+
+        return { viewType, selectedMonth, total, dayCount, dailyAvg, catRank, dailyData, maxDaily, colors }
+      }
+    }
+
     const Placeholder = { template: '<div style="text-align:center;padding:48px;color:#999">页面开发中</div>' }
 
     const routes = [
       { path: '/', component: Home },
       { path: '/add', component: AddRecord },
       { path: '/bill', component: BillList },
+      { path: '/statistics', component: Statistics },
       { path: '/settings', component: Settings },
-      { path: '/statistics', component: Placeholder },
       { path: '/assets', component: Placeholder },
       { path: '/budget', component: Placeholder },
       { path: '/reimburse', component: Placeholder },
