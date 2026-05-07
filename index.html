@@ -1,16 +1,212 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#4A90D9" />
-    <title>记账本</title>
-    <script type="module" crossorigin src="./assets/index-C8JKVFmL.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/_plugin-vue_export-helper-CLso0D3F.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-DoHysfVJ.css">
-  </head>
-  <body>
-    <div id="app"></div>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>记账本 - 测试</title>
+  <style>body{font-family:sans-serif;padding:20px;background:#f5f6fa}#app{max-width:400px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.1)}h1{color:#4A90D9;font-size:20px}p{color:#666}</style>
+</head>
+<body>
+  <div id="app">
+    <h1>记账本</h1>
+    <p>Vue 应用正在加载...</p>
+  </div>
+  <script type="importmap">
+  {
+    "imports": {
+      "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.prod.js",
+      "vue-router": "https://unpkg.com/vue-router@4/dist/vue-router.esm-browser.prod.js",
+      "pinia": "https://unpkg.com/pinia@2/dist/pinia.esm-browser.prod.js"
+    }
+  }
+  </script>
+  <script type="module">
+    import { createApp, ref, computed, onMounted } from 'vue'
+    import { createRouter, createWebHashHistory } from 'vue-router'
+
+    const STORAGE_KEY = 'ledger_records'
+
+    const Home = {
+      template: `
+        <div>
+          <div style="background:linear-gradient(135deg,#4A90D9,#357ABD);border-radius:12px;padding:20px;color:#fff;margin-bottom:16px">
+            <div style="font-size:13px;opacity:.8">本月支出</div>
+            <div style="font-size:22px;font-weight:600;margin:8px 0">¥{{ monthExpense }}</div>
+            <div style="font-size:13px;opacity:.8">本月收入</div>
+            <div style="font-size:22px;font-weight:600;color:#B8E6B8">¥{{ monthIncome }}</div>
+          </div>
+          <div style="font-size:14px;color:#999">
+            <p v-if="todayRecords.length === 0">今日暂无记录</p>
+            <div v-for="r in todayRecords.slice(0,5)" :key="r.id" style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f0f0f0">
+              <span>{{ getCategoryIcon(r.categoryId) }} {{ getCategoryName(r.categoryId) }}</span>
+              <span :style="{color:r.type==='expense'?'#FF6B6B':'#4CAF50',fontWeight:600}">
+                {{ r.type==='expense'?'-':'+' }}¥{{ r.amount.toFixed(2) }}
+              </span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px">
+            <div v-for="item in [{icon:'📊',label:'统计',path:'/statistics'},{icon:'💰',label:'预算',path:'/budget'},{icon:'🏦',label:'资产',path:'/assets'},{icon:'🧾',label:'报销',path:'/reimburse'}]" :key="item.path" @click="router.push(item.path)" style="text-align:center;padding:12px;cursor:pointer;border-radius:8px;background:#f5f6fa">
+              <div style="font-size:20px">{{ item.icon }}</div>
+              <div style="font-size:12px;color:#666;margin-top:4px">{{ item.label }}</div>
+            </div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const records = ref([])
+        onMounted(() => {
+          try {
+            records.value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+          } catch { records.value = [] }
+        })
+        const monthRecords = computed(() => {
+          const now = new Date()
+          const m = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+          return records.value.filter(r => r.date && r.date.startsWith(m))
+        })
+        const todayRecords = computed(() => {
+          const today = new Date().toISOString().split('T')[0]
+          return records.value.filter(r => r.date && r.date.startsWith(today))
+        })
+        const monthExpense = computed(() => monthRecords.value.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0).toFixed(2))
+        const monthIncome = computed(() => monthRecords.value.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0).toFixed(2))
+        const getCategoryName = (id) => ({food:'餐饮',transport:'交通',shopping:'购物',housing:'住房',entertainment:'娱乐',medical:'医疗',education:'教育',communication:'通讯',clothing:'服饰',beauty:'美容',sports:'运动',pet:'宠物',travel:'旅行',gift:'礼物',other_expense:'其他',salary:'工资',bonus:'奖金',investment:'理财',parttime:'兼职',redpacket:'红包',refund:'退款',other_income:'其他'}[id]||'未分类')
+        const getCategoryIcon = (id) => ({food:'🍜',transport:'🚗',shopping:'🛍️',housing:'🏠',entertainment:'🎮',medical:'🏥',education:'📚',communication:'📱',clothing:'👔',beauty:'💄',sports:'⚽',pet:'🐾',travel:'✈️',gift:'🎁',other_expense:'📝',salary:'💰',bonus:'🏆',investment:'📈',parttime:'💼',redpacket:'🧧',refund:'↩️',other_income:'📝'}[id]||'📝')
+        return { monthExpense, monthIncome, todayRecords, records, getCategoryName, getCategoryIcon }
+      }
+    }
+
+    const AddRecord = {
+      template: `
+        <div>
+          <div style="display:flex;gap:8px;margin-bottom:16px">
+            <button @click="type='expense'" :style="{flex:1,padding:'10px',borderRadius:'8px',border:'none',background:type==='expense'?'#4A90D9':'#f5f6fa',color:type==='expense'?'#fff':'#333',fontWeight:500,cursor:'pointer'}">支出</button>
+            <button @click="type='income'" :style="{flex:1,padding:'10px',borderRadius:'8px',border:'none',background:type==='income'?'#4A90D9':'#f5f6fa',color:type==='income'?'#fff':'#333',fontWeight:500,cursor:'pointer'}">收入</button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+            <div v-for="cat in categories" :key="cat.id" @click="selectedCat=cat" :style="{padding:'8px 12px',borderRadius:'8px',background:selectedCat?.id===cat.id?'#4A90D920':'#f5f6fa',cursor:'pointer',fontSize:'13px',textAlign:'center'}">
+              <div style="font-size:20px">{{ cat.icon }}</div>
+              <div style="font-size:12px;color:#666;margin-top:2px">{{ cat.name }}</div>
+            </div>
+          </div>
+          <input v-model="amount" type="number" step="0.01" placeholder="金额" style="width:100%;padding:12px;font-size:24px;font-weight:600;border:2px solid #e8e8e8;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box"/>
+          <input v-model="note" type="text" placeholder="备注" style="width:100%;padding:10px;font-size:14px;border:2px solid #e8e8e8;border-radius:8px;outline:none;margin-bottom:12px;box-sizing:border-box"/>
+          <input v-model="date" type="date" style="width:100%;padding:10px;font-size:14px;border:2px solid #e8e8e8;border-radius:8px;outline:none;margin-bottom:16px;box-sizing:border-box"/>
+          <button @click="save" :disabled="!amount||!selectedCat" :style="{width:'100%',padding:'14px',border:'none',borderRadius:'8px',background:(!amount||!selectedCat)?'#ccc':'#4A90D9',color:'#fff',fontSize:'16px',fontWeight:600,cursor:(!amount||!selectedCat)?'not-allowed':'pointer'}">保存记录</button>
+        </div>
+      `,
+      setup() {
+        const type = ref('expense')
+        const amount = ref('')
+        const note = ref('')
+        const date = ref(new Date().toISOString().split('T')[0])
+        const selectedCat = ref(null)
+        const categories = [
+          {id:'food',name:'餐饮',icon:'🍜'},{id:'transport',name:'交通',icon:'🚗'},{id:'shopping',name:'购物',icon:'🛍️'},
+          {id:'housing',name:'住房',icon:'🏠'},{id:'entertainment',name:'娱乐',icon:'🎮'},{id:'medical',name:'医疗',icon:'🏥'},
+          {id:'education',name:'教育',icon:'📚'},{id:'communication',name:'通讯',icon:'📱'},{id:'clothing',name:'服饰',icon:'👔'},
+          {id:'beauty',name:'美容',icon:'💄'},{id:'sports',name:'运动',icon:'⚽'},{id:'pet',name:'宠物',icon:'🐾'},
+          {id:'travel',name:'旅行',icon:'✈️'},{id:'gift',name:'礼物',icon:'🎁'},{id:'other_expense',name:'其他',icon:'📝'}
+        ]
+        const router = useRouter()
+        function save() {
+          if (!selectedCat.value || !amount.value) return
+          const records = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+          records.unshift({ id: Date.now().toString(36), type: type.value, categoryId: selectedCat.value.id, amount: parseFloat(amount.value), note: note.value, date: date.value, createdAt: new Date().toISOString() })
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
+          router.push('/')
+        }
+        return { type, amount, note, date, selectedCat, categories, save, router }
+      }
+    }
+
+    const BillList = {
+      template: `
+        <div>
+          <div style="font-size:13px;color:#999;margin-bottom:8px">{{ selectedMonth }}</div>
+          <div style="display:flex;justify-content:space-between;padding:12px 16px;background:#fff;border-radius:8px;margin-bottom:12px">
+            <span>支出: <span style="color:#FF6B6B;font-weight:600">¥{{ expense }}</span></span>
+            <span>收入: <span style="color:#4CAF50;font-weight:600">¥{{ income }}</span></span>
+          </div>
+          <div v-if="groups.length===0" style="text-align:center;padding:32px;color:#999">本月暂无记录</div>
+          <div v-for="g in groups" :key="g.date" style="background:#fff;border-radius:8px;margin-bottom:12px;overflow:hidden">
+            <div style="padding:10px 16px;background:#f5f6fa;font-size:13px;color:#666;display:flex;justify-content:space-between">{{ g.date }}</div>
+            <div v-for="r in g.records" :key="r.id" style="display:flex;justify-content:space-between;padding:12px 16px;border-top:1px solid #f0f0f0">
+              <span>{{ getCategoryIcon(r.categoryId) }} {{ getCategoryName(r.categoryId) }} <span v-if="r.note" style="color:#999;font-size:12px">({{ r.note }})</span></span>
+              <span :style="{color:r.type==='expense'?'#FF6B6B':'#4CAF50',fontWeight:600}">{{ r.type==='expense'?'-':'+' }}¥{{ r.amount.toFixed(2) }}</span>
+            </div>
+          </div>
+        </div>
+      `,
+      setup() {
+        const records = ref([])
+        onMounted(() => { try { records.value = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]') } catch { records.value = [] } })
+        const selectedMonth = ref(new Date().toISOString().slice(0,7))
+        const monthRecords = computed(() => records.value.filter(r => r.date && r.date.startsWith(selectedMonth.value)))
+        const expense = computed(() => monthRecords.value.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0).toFixed(2))
+        const income = computed(() => monthRecords.value.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0).toFixed(2))
+        const groups = computed(() => {
+          const g = {}
+          monthRecords.value.forEach(r => { const d = r.date?.slice(0,10)||'未知'; if(!g[d])g[d]=[]; g[d].push(r) })
+          return Object.entries(g).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,recs])=>({date,records:recs}))
+        })
+        const getCategoryName = (id) => ({food:'餐饮',transport:'交通',shopping:'购物',housing:'住房',entertainment:'娱乐',medical:'医疗',education:'教育',communication:'通讯',clothing:'服饰',beauty:'美容',sports:'运动',pet:'宠物',travel:'旅行',gift:'礼物',other_expense:'其他',salary:'工资',bonus:'奖金',investment:'理财',parttime:'兼职',redpacket:'红包',refund:'退款',other_income:'其他'}[id]||'未分类')
+        const getCategoryIcon = (id) => ({food:'🍜',transport:'🚗',shopping:'🛍️',housing:'🏠',entertainment:'🎮',medical:'🏥',education:'📚',communication:'📱',clothing:'👔',beauty:'💄',sports:'⚽',pet:'🐾',travel:'✈️',gift:'🎁',other_expense:'📝',salary:'💰',bonus:'🏆',investment:'📈',parttime:'💼',redpacket:'🧧',refund:'↩️',other_income:'📝'}[id]||'📝')
+        return { selectedMonth, expense, income, groups, getCategoryName, getCategoryIcon }
+      }
+    }
+
+    const Settings = {
+      template: `
+        <div>
+          <div style="background:#fff;border-radius:8px;overflow:hidden;margin-bottom:12px">
+            <div style="padding:14px 16px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;cursor:pointer" @click="exportData"><span>导出数据</span><span style="color:#999">→</span></div>
+            <div style="padding:14px 16px;cursor:pointer;color:#FF6B6B" @click="clearData"><span>清除所有数据</span><span style="float:right;color:#999">→</span></div>
+          </div>
+          <div style="background:#fff;border-radius:8px;overflow:hidden">
+            <div style="padding:14px 16px;display:flex;justify-content:space-between"><span>版本</span><span style="color:#999">1.0.0</span></div>
+          </div>
+        </div>
+      `,
+      setup() {
+        function exportData() {
+          const d = localStorage.getItem(STORAGE_KEY)
+          if(!d){alert('暂无数据');return}
+          const b=new Blob([d],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`ledger-${new Date().toISOString().slice(0,10)}.json`;a.click()
+        }
+        function clearData(){if(confirm('确定清除所有数据？')){localStorage.removeItem(STORAGE_KEY);location.reload()}}
+        return { exportData, clearData }
+      }
+    }
+
+    const routes = [
+      { path: '/', component: Home },
+      { path: '/add', component: AddRecord },
+      { path: '/bill', component: BillList },
+      { path: '/settings', component: Settings },
+      { path: '/statistics', component: { template: '<div style="text-align:center;padding:48px;color:#999">统计页面开发中</div>' } },
+      { path: '/assets', component: { template: '<div style="text-align:center;padding:48px;color:#999">资产页面开发中</div>' } },
+      { path: '/budget', component: { template: '<div style="text-align:center;padding:48px;color:#999">预算页面开发中</div>' } },
+      { path: '/reimburse', component: { template: '<div style="text-align:center;padding:48px;color:#999">报销页面开发中</div>' } },
+    ]
+
+    const router = createRouter({ history: createWebHashHistory(), routes })
+    const app = createApp({
+      template: `
+        <div>
+          <router-view></router-view>
+          <nav style="position:fixed;bottom:0;left:0;right:0;height:64px;background:#fff;border-top:1px solid #e8e8e8;display:flex;align-items:center;justify-content:space-around">
+            <a href="#/" style="text-decoration:none;color:#999;font-size:12px;display:flex;flex-direction:column;align-items:center"><span style="font-size:20px">🏠</span>首页</a>
+            <a href="#/bill" style="text-decoration:none;color:#999;font-size:12px;display:flex;flex-direction:column;align-items:center"><span style="font-size:20px">📋</span>账单</a>
+            <a href="#/add" style="text-decoration:none;color:#4A90D9;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:#4A90D9;color:#fff;font-size:28px;margin-top:-12px;box-shadow:0 4px 12px rgba(74,144,217,.4)">+</a>
+            <a href="#/statistics" style="text-decoration:none;color:#999;font-size:12px;display:flex;flex-direction:column;align-items:center"><span style="font-size:20px">📊</span>统计</a>
+            <a href="#/settings" style="text-decoration:none;color:#999;font-size:12px;display:flex;flex-direction:column;align-items:center"><span style="font-size:20px">⚙️</span>设置</a>
+          </nav>
+        </div>
+      `
+    })
+    app.use(router)
+    app.mount('#app')
+  </script>
+</body>
 </html>
